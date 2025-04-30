@@ -6,6 +6,7 @@ import re
 import types
 from copy import deepcopy
 from pathlib import Path
+from ultralytics.nn.modules.block import CBAM
 
 import torch
 import torch.nn as nn
@@ -1484,6 +1485,12 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             args = [c1, c2, *args[1:]]
         elif m is CBFuse:
             c2 = ch[f[-1]]
+        elif m is CBAM:
+            # args 里第一个元素是你 yaml 里写的通道数，一般和前一层输出一致
+            c1 = ch[f]  # 上一层输出的通道数
+            args = [c1]  # CBAM 只需要输入通道数
+            c2 = c1  # 输出通道数不变
+
         elif m in frozenset({TorchVision, Index}):
             c2 = args[0]
             c1 = ch[f]
