@@ -7,7 +7,8 @@ import types
 from copy import deepcopy
 from pathlib import Path
 from ultralytics.nn.modules.block import CBAM
-
+from ultralytics.nn.tasks import ComputeLoss  
+from ultralytics.losses import ClassBalancedFocalLoss  
 import torch
 import torch.nn as nn
 
@@ -1621,3 +1622,36 @@ def guess_model_task(model):
         "Explicitly define task for your model, i.e. 'task=detect', 'segment', 'classify','pose' or 'obb'."
     )
     return "detect"  # assume detect
+# 你的样本数列表
+samples_per_cls = [44, 551, 71, 200, 997, 137, 192, 661, 335, 136,
+                   1119, 767, 203, 331, 105, 325, 302, 137, 239,
+                   830, 439, 358, 176, 1364, 151, 397, 47, 101,
+                   531, 327, 181, 349, 281, 265, 64, 344]
+
+# 实例化一次 CBFL
+_cbfl = ClassBalancedFocalLoss(samples_per_cls, beta=0.9999, gamma=2.0)
+
+# 保存原始 __call__ 方法
+_orig_compute = ComputeLoss.__call__
+
+def _patched_compute(self, *args, **kwargs):
+    # args = (preds, targets) or (batch, preds) 视 YOLO 版本而定
+    loss = _orig_compute(self, *args, **kwargs)
+    # preds[0] 是分类 logits: [B,C,N]
+    preds = args[0] if isinstance(args[0], (list,tuple)) else args[1]
+    logits = preds[0]
+    # batch 里取 cls
+    batch = args[0] if not isinstance(args[0], (list,tuple)) else args[1]
+    cls_ids = batch['cls'].long()  # [B,N]
+    # 构造 one-hot [B,C,N]
+    one_hot = torch.nn.functional.one_hot(
+                  cls_ids, logits.shape[1]
+              ).permute(0,2,1).float().to(logits.device)
+    cbfl_loss = _cbfl(logits, one_hot)
+    # 分类权重取自 self.hyp['cls']
+    cls_w = getattr(self, 'hyp', {}).get('cls', 1.0)
+    return loss + cls_w * cbfl_loss
+
+# 覆盖
+ComputeLoss.__call__ = _patched_compute
+# --- END CBFL MONKEY PATCH ---
