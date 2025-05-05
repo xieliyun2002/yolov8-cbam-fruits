@@ -1657,6 +1657,8 @@ def guess_model_task(model):
         "Explicitly define task for your model, i.e. 'task=detect', 'segment', 'classify','pose' or 'obb'."
     )
     return "detect"  # assume detect
+import torch
+from ultralytics.losses import ClassBalancedFocalLoss
 # 你的样本数列表
 samples_per_cls = [44, 551, 71, 200, 997, 137, 192, 661, 335, 136,
                    1119, 767, 203, 331, 105, 325, 302, 137, 239,
