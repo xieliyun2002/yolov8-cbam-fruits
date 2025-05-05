@@ -9,6 +9,8 @@ from pathlib import Path
 from ultralytics.nn.modules.block import CBAM
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from ultralytics.losses import ClassBalancedFocalLoss
 
 from ultralytics.nn.autobackend import check_class_names
 from ultralytics.nn.modules import (
