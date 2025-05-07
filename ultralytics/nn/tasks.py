@@ -12,7 +12,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from ultralytics.losses import ClassBalancedFocalLoss
 from ultralytics.utils.loss import E2EDetectLoss, v8DetectionLoss
-from ultralytics.losses import ComputeLoss
 
 
 from ultralytics.nn.autobackend import check_class_names
@@ -437,11 +436,6 @@ def init_criterion(self):
         # 1️⃣ 构造原生 YOLOv8 Detection Loss
         from ultralytics.utils.loss import E2EDetectLoss, v8DetectionLoss
         base_loss = E2EDetectLoss(self) if getattr(self, "end2end", False) else v8DetectionLoss(self)
-
-        # 2️⃣ 引入 ClassBalancedFocalLoss
-        import torch
-        import torch.nn.functional as F
-        from ultralytics.losses import ClassBalancedFocalLoss
 
         # ← 替换为你统计好的每类样本数列表
         samples_per_cls = [44, 551, 71, 200, 997, 137, 192, 661, 335, 136,
