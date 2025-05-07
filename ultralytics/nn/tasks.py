@@ -451,6 +451,7 @@ class DetectionModel(BaseModel):
             return wrapped_loss(preds, batch)
 
         self.criterion = wrapper  # 注意：不提前构建全部结构
+        return self.criterion 
 
 
 
