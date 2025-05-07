@@ -95,6 +95,18 @@ from ultralytics.utils.torch_utils import (
     smart_inference_mode,
     time_sync,
 )
+def cbfl_patched_call(self, preds, batch):
+    yolo_loss = self._orig_call(preds, batch)
+
+    logits = preds[0]
+    cls_ids = batch['cls'].long()
+    one_hot = F.one_hot(cls_ids, logits.shape[1]) \
+                .permute(0, 2, 1).float().to(logits.device)
+
+    cbfl_loss = self._cbfl(logits, one_hot)
+
+    cls_w = getattr(self, 'args', {}).get('cls', getattr(self, 'hyp', {}).get('cls', 1.0))
+    return yolo_loss + cls_w * cbfl_loss
 
 try:
     import thop
@@ -433,39 +445,19 @@ class DetectionModel(BaseModel):
         return y
 
 def init_criterion(self):
-        # 1️⃣ 构造原生 YOLOv8 Detection Loss
-        from ultralytics.utils.loss import E2EDetectLoss, v8DetectionLoss
-        base_loss = E2EDetectLoss(self) if getattr(self, "end2end", False) else v8DetectionLoss(self)
+       base_loss = E2EDetectLoss(self) if getattr(self, "end2end", False) else v8DetectionLoss(self)
 
-        # ← 替换为你统计好的每类样本数列表
-        samples_per_cls = [44, 551, 71, 200, 997, 137, 192, 661, 335, 136,
-                           1119, 767, 203, 331, 105, 325, 302, 137, 239,
-                           830, 439, 358, 176, 1364, 151, 397, 47, 101,
-                           531, 327, 181, 349, 281, 265, 64, 344]
-        cbfl = ClassBalancedFocalLoss(samples_per_cls, beta=0.9999, gamma=2.0)
+    samples_per_cls = [44, 551, 71, 200, 997, 137, 192, 661, 335, 136,
+                       1119, 767, 203, 331, 105, 325, 302, 137, 239,
+                       830, 439, 358, 176, 1364, 151, 397, 47, 101,
+                       531, 327, 181, 349, 281, 265, 64, 344]
+    cbfl = ClassBalancedFocalLoss(samples_per_cls, beta=0.9999, gamma=2.0)
 
-        # 3️⃣ Monkey‐patch base_loss.__call__，在原始 loss 后叠加 CBFL
-        orig_call = base_loss.__call__
-        def patched_call(preds, batch):
-            # a) 原生 YOLOv8 损失
-            yolo_loss = orig_call(preds, batch)
+    base_loss._orig_call = base_loss.__call__
+    base_loss._cbfl = cbfl
+    base_loss.__call__ = cbfl_patched_call.__get__(base_loss, type(base_loss))  # ← 重点是这里
 
-            # b) CBFL 只针对分类 logits
-            #    preds[0] 是 [B, C, N] 分类 logits
-            logits  = preds[0]
-            cls_ids = batch['cls'].long()                       # [B, N]
-            one_hot = F.one_hot(cls_ids, logits.shape[1])      \
-                        .permute(0,2,1).float().to(logits.device)  # → [B, C, N]
-            cbfl_loss = cbfl(logits, one_hot)
-
-            # c) 分类权重读取自超参 cls
-            cls_w = getattr(self, 'args', {}).get('cls', 
-                      getattr(self, 'hyp', {}).get('cls', 1.0))
-
-            return yolo_loss + cls_w * cbfl_loss
-
-        base_loss.__call__ = patched_call
-        return base_loss
+    return base_loss
 
 
 class OBBModel(DetectionModel):
