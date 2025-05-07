@@ -31,11 +31,14 @@ class ClassBalancedFocalLoss(nn.Module):
         self.bce   = nn.BCEWithLogitsLoss(reduction='none')
 
     def forward(self, logits, targets):
-        bce   = self.bce(logits, targets)
-        p     = torch.sigmoid(logits)
-        pt    = p*targets + (1-p)*(1-targets)
-        focal = (1-pt).pow(self.gamma)
-        cw = self.cw.view(1, 1, -1)
+        bce = self.bce(logits, targets)
+        p = torch.sigmoid(logits)
+        pt = p * targets + (1 - p) * (1 - targets)
+        focal = (1 - pt).pow(self.gamma)
+
+        # ✅ 修复：将 cw 移到 logits 同一设备上
+        cw = self.cw.view(1, 1, -1).to(logits.device)
+
         return (cw * focal * bce).mean()
 
 class CBFLossWrapper(nn.Module):
