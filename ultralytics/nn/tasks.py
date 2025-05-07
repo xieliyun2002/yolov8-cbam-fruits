@@ -443,21 +443,9 @@ class DetectionModel(BaseModel):
         i = (y[-1].shape[-1] // g) * sum(4 ** (nl - 1 - x) for x in range(e))  # indices
         y[-1] = y[-1][..., i:]  # small
         return y
-
-def init_criterion(self):
-       base_loss = E2EDetectLoss(self) if getattr(self, "end2end", False) else v8DetectionLoss(self)
-
-    samples_per_cls = [44, 551, 71, 200, 997, 137, 192, 661, 335, 136,
-                       1119, 767, 203, 331, 105, 325, 302, 137, 239,
-                       830, 439, 358, 176, 1364, 151, 397, 47, 101,
-                       531, 327, 181, 349, 281, 265, 64, 344]
-    cbfl = ClassBalancedFocalLoss(samples_per_cls, beta=0.9999, gamma=2.0)
-
-    base_loss._orig_call = base_loss.__call__
-    base_loss._cbfl = cbfl
-    base_loss.__call__ = cbfl_patched_call.__get__(base_loss, type(base_loss))  # ← 重点是这里
-
-    return base_loss
+    def init_criterion(self):
+        from ultralytics.losses import CBFLossWrapper
+        return CBFLossWrapper(self)
 
 
 class OBBModel(DetectionModel):
