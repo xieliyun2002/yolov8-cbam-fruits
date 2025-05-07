@@ -437,15 +437,13 @@ class DetectionModel(BaseModel):
         from ultralytics.utils.loss import v8DetectionLoss, E2EDetectLoss
 
         base_loss = E2EDetectLoss(self) if getattr(self, "end2end", False) else v8DetectionLoss(self)
-
-        samples_per_cls = [44, 551, 71, 200, 997, 137, 192, 661, 335, 136,
-                           1119, 767, 203, 331, 105, 325, 302, 137, 239,
-                           830, 439, 358, 176, 1364, 151, 397, 47, 101,
-                           531, 327, 181, 349, 281, 265, 64, 344]
+        samples_per_cls = [44, 551, ..., 344]  # 略
         cbfl = ClassBalancedFocalLoss(samples_per_cls, beta=0.9999, gamma=2.0)
         cls_w = getattr(self, 'args', {}).get('cls', getattr(self, 'hyp', {}).get('cls', 1.0))
+        nc = self.model[-1].nc
+        reg_max = self.model[-1].reg_max
 
-        self.criterion = CBFLossWrapper(base_loss, cbfl, cls_w)
+        self.criterion = CBFLossWrapper(base_loss, cbfl, cls_w, nc, reg_max)
 
 
 
