@@ -42,10 +42,12 @@ class CBFLossWrapper(nn.Module):
     def __init__(self, base_loss, cbfl, cls_w):
         super().__init__()
         self.base_loss = base_loss
-        self.cbfl = cbfl
-        self.cls_w = cls_w
-        self.nc = cbfl.num_classes  # 必须一致
-        self.reg_max = getattr(base_loss, 'reg_max', 16)  # 你在 cfg 里设定的值
+        self.cbfl      = cbfl
+        self.cls_w     = cls_w
+
+        # <<<<<< 修 正 处 >>>>>>
+        self.nc       = cbfl.cw.numel()          # ← 代替 cbfl.num_classes
+        self.reg_max  = getattr(base_loss, 'reg_max', 16)
 
     def forward(self, preds, batch):
         # 1. 基础 YOLOv8 损失
