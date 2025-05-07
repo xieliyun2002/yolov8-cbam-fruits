@@ -95,18 +95,7 @@ from ultralytics.utils.torch_utils import (
     smart_inference_mode,
     time_sync,
 )
-def cbfl_patched_call(self, preds, batch):
-    yolo_loss = self._orig_call(preds, batch)
 
-    logits = preds[0]
-    cls_ids = batch['cls'].long()
-    one_hot = F.one_hot(cls_ids, logits.shape[1]) \
-                .permute(0, 2, 1).float().to(logits.device)
-
-    cbfl_loss = self._cbfl(logits, one_hot)
-
-    cls_w = getattr(self, 'args', {}).get('cls', getattr(self, 'hyp', {}).get('cls', 1.0))
-    return yolo_loss + cls_w * cbfl_loss
 
 try:
     import thop
