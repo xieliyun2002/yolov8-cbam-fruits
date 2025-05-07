@@ -38,23 +38,34 @@ class ClassBalancedFocalLoss(nn.Module):
         cw    = self.cw.view(1, -1, 1)
         return (cw * focal * bce).mean()
 
-class CBFLossWrapper:
-    def __init__(self, base_loss, cbfl, cls_w, nc, reg_max):
+class CBFLossWrapper(nn.Module):
+    def __init__(self, base_loss, cbfl, cls_w):
+        super().__init__()
         self.base_loss = base_loss
         self.cbfl = cbfl
         self.cls_w = cls_w
-        self.nc = nc
-        self.reg_max = reg_max
+        self.nc = cbfl.num_classes  # 必须一致
+        self.reg_max = getattr(base_loss, 'reg_max', 16)  # 你在 cfg 里设定的值
 
-    def __call__(self, preds, batch):
+    def forward(self, preds, batch):
+        # 1. 基础 YOLOv8 损失
         yolo_loss = self.base_loss(preds, batch)
 
-        # === 分类 logits 提取 ===
-        logits = extract_cls_preds(preds, self.nc, self.reg_max)  # [B, N, C]
-        cls_ids = batch["cls"].long().squeeze(-1)  # [B, N]
-        one_hot = torch.nn.functional.one_hot(cls_ids, self.nc).float().to(logits.device)  # [B, N, C]
+        # 2. 提取分类 logits：preds[1] 是 Detect 的输出（List[Tensors]）
+        logits = extract_cls_preds(preds, self.nc, self.reg_max)  # => [B, N, C]
 
-        # === CBFL 计算 ===
-        cbfl_loss = self.cbfl(logits, one_hot)
+        # 3. 获取目标标签
+        gt_labels = batch['cls']  # shape: [B, N, 1]
+        target_scores = batch['batch_idx'].unsqueeze(-1).float() * 0 + 1.0  # 所有为1，等效于 valid mask
 
+        # 4. 构建 one-hot 标签
+        cls_ids = gt_labels.squeeze(-1).long()               # [B, N]
+        one_hot = F.one_hot(cls_ids, num_classes=self.nc)    # [B, N, C]
+        one_hot = one_hot * target_scores.unsqueeze(-1)      # 掩码无效项
+        one_hot = one_hot.to(dtype=logits.dtype)             # 与 logits 对齐
+
+        # 5. 计算分类损失
+        cbfl_loss = self.cbfl(logits, one_hot)               # logits: [B, N, C], one_hot: [B, N, C]
+
+        # 6. 加权合并
         return yolo_loss + self.cls_w * cbfl_loss
