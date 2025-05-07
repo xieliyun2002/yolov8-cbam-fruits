@@ -166,6 +166,12 @@ class v8DetectionLoss:
 
     def __init__(self, model, tal_topk=10):  # model must be de-paralleled
         """Initialize v8DetectionLoss with model parameters and task-aligned assignment settings."""
+        from ultralytics.losses import ClassBalancedFocalLoss
+        samples_per_cls = [44, 551, 71, 200, 997, 137, 192, 661, 335, 136,
+                       1119, 767, 203, 331, 105, 325, 302, 137, 239,
+                       830, 439, 358, 176, 1364, 151, 397, 47, 101,
+                       531, 327, 181, 349, 281, 265, 64, 344]
+        self.cbfl = ClassBalancedFocalLoss(samples_per_cls, beta=0.9999, gamma=2.0)
         device = next(model.parameters()).device  # get model device
         h = model.args  # hyperparameters
 
@@ -324,8 +330,12 @@ class v8SegmentationLoss(v8DetectionLoss):
         target_scores_sum = max(target_scores.sum(), 1)
 
         # Cls loss
-        # loss[1] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
-        loss[2] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
+        cls_ids = gt_labels.squeeze(-1).long()  # (B, N)
+        one_hot = F.one_hot(cls_ids, num_classes=self.nc).float()  # (B, N, C)
+        one_hot = one_hot * target_scores.unsqueeze(-1)  # mask invalid
+        one_hot = one_hot.permute(0, 2, 1).contiguous()  # (B, C, N)
+        cbfl_loss = self.cbfl(pred_scores, one_hot.to(dtype))
+        loss[1] = cbfl_loss / target_scores_sum  # 替换 BCE 分类损失E
 
         if fg_mask.sum():
             # Bbox loss
