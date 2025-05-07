@@ -176,7 +176,7 @@ class v8DetectionLoss:
                            1119, 767, 203, 331, 105, 325, 302, 137, 239,
                            830, 439, 358, 176, 1364, 151, 397, 47, 101,
                            531, 327, 181, 349, 281, 265, 64, 344]
-self.cbfl = ClassBalancedFocalLoss(samples_per_cls, beta=0.9999, gamma=2.0)
+        self.cbfl = ClassBalancedFocalLoss(samples_per_cls, beta=0.9999, gamma=2.0)
         self.hyp = h
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
@@ -256,8 +256,7 @@ self.cbfl = ClassBalancedFocalLoss(samples_per_cls, beta=0.9999, gamma=2.0)
         target_scores_sum = max(target_scores.sum(), 1)
 
         # Cls loss
-        # loss[1] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
-        loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
+        loss[1] = self.cbfl(pred_scores, target_scores.to(dtype)) / target_scores_sum
 
         # Bbox loss
         if fg_mask.sum():
