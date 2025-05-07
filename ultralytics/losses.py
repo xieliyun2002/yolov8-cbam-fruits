@@ -38,29 +38,23 @@ class ClassBalancedFocalLoss(nn.Module):
         cw    = self.cw.view(1, -1, 1)
         return (cw * focal * bce).mean()
 
-class CBFLossWrapper(nn.Module):
-    def __init__(self, yolo_loss, cbfl, cls_w=1.0):
-        super().__init__()
-        self.yolo_loss = yolo_loss
+class CBFLossWrapper:
+    def __init__(self, base_loss, cbfl, cls_w, nc, reg_max):
+        self.base_loss = base_loss
         self.cbfl = cbfl
         self.cls_w = cls_w
+        self.nc = nc
+        self.reg_max = reg_max
 
-    def forward(self, preds, batch):
-        # 原 YOLOv8 损失
-        yolo_loss, loss_items = self.yolo_loss(preds, batch)
+    def __call__(self, preds, batch):
+        yolo_loss = self.base_loss(preds, batch)
 
-        # 获取分类 logits
-        pred_cls = preds[1]  # YOLOv8 的 preds 是 (pred_box, pred_cls, pred_dfl)
-        gt_labels = batch["cls"]
-        target_scores = batch["batch_idx"].unsqueeze(1).float()  # 或根据你数据定义设置 mask
+        # === 分类 logits 提取 ===
+        logits = extract_cls_preds(preds, self.nc, self.reg_max)  # [B, N, C]
+        cls_ids = batch["cls"].long().squeeze(-1)  # [B, N]
+        one_hot = torch.nn.functional.one_hot(cls_ids, self.nc).float().to(logits.device)  # [B, N, C]
 
-        # One-hot 标签构造
-        cls_ids = gt_labels.squeeze(-1).long()                # (B, N)
-        one_hot = F.one_hot(cls_ids, num_classes=pred_cls.shape[1]).float()  # (B, N, C)
-        one_hot = one_hot.permute(0, 2, 1).contiguous()        # (B, C, N)
+        # === CBFL 计算 ===
+        cbfl_loss = self.cbfl(logits, one_hot)
 
-        cbfl_loss = self.cbfl(pred_cls, one_hot.to(pred_cls.dtype))
-
-        # 返回总损失 + 各项
-        total_loss = yolo_loss + self.cls_w * cbfl_loss
-        return total_loss, loss_items
+        return yolo_loss + self.cls_w * cbfl_loss
