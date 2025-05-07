@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ultralytics.losses import ClassBalancedFocalLoss
+from ultralytics.utils.loss import E2EDetectLoss, v8DetectionLoss
 
 from ultralytics.nn.autobackend import check_class_names
 from ultralytics.nn.modules import (
@@ -431,7 +432,6 @@ class DetectionModel(BaseModel):
         return y
 
 def init_criterion(self):
-        """Initialize the loss criterion for the DetectionModel, with CBFL augmentation."""
         # 1️⃣ 构造原生 YOLOv8 Detection Loss
         from ultralytics.utils.loss import E2EDetectLoss, v8DetectionLoss
         base_loss = E2EDetectLoss(self) if getattr(self, "end2end", False) else v8DetectionLoss(self)
