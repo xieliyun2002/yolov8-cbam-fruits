@@ -12,6 +12,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from ultralytics.losses import ClassBalancedFocalLoss
 from ultralytics.utils.loss import E2EDetectLoss, v8DetectionLoss
+from ultralytics.losses import ComputeLoss
+
 
 from ultralytics.nn.autobackend import check_class_names
 from ultralytics.nn.modules import (
