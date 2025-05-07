@@ -3,6 +3,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 from ultralytics.utils.loss import v8DetectionLoss
 
+
+def extract_cls_preds(preds, nc, reg_max):
+    feats = preds[1] if isinstance(preds, tuple) else preds  # Detect 输出
+    no = nc + reg_max * 4
+    b = feats[0].shape[0]
+
+    cls_list = []
+    for x in feats:  # 每层 [B, no, H, W]
+        x = x.view(b, no, -1)         # [B, no, HW]
+        cls_pred = x[:, reg_max*4:, :]  # [B, nc, HW]
+        cls_list.append(cls_pred)
+
+    cls_preds = torch.cat(cls_list, dim=2)  # [B, nc, N]
+    return cls_preds.permute(0, 2, 1).contiguous()  # [B, N, nc]
+
+
 class ClassBalancedFocalLoss(nn.Module):
     def __init__(self, samples_per_cls, beta=0.9999, gamma=2.0):
         super().__init__()
