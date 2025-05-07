@@ -457,7 +457,7 @@ class DetectionModel(BaseModel):
         reg_max = self.model[-1].reg_max     # DFL bins
 
     # 4. 最终包装
-        self.criterion = CBFLossWrapper(base_loss, cbfl, cls_w, nc, reg_max)
+        self.criterion = CBFLossWrapper(base_loss, cbfl, cls_w)
 
         return self.criterion   
 
