@@ -445,7 +445,8 @@ class DetectionModel(BaseModel):
         cbfl = ClassBalancedFocalLoss(samples_per_cls, beta=0.9999, gamma=2.0)
         cls_w = getattr(self, 'args', {}).get('cls', getattr(self, 'hyp', {}).get('cls', 1.0))
 
-        return CBFLossWrapper(base_loss, cbfl, cls_w)
+        self.criterion = CBFLossWrapper(base_loss, cbfl, cls_w)
+
 
 
 
