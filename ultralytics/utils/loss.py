@@ -166,17 +166,17 @@ class v8DetectionLoss:
 
     def __init__(self, model, tal_topk=10):  # model must be de-paralleled
         """Initialize v8DetectionLoss with model parameters and task-aligned assignment settings."""
-        from ultralytics.losses import ClassBalancedFocalLoss
-        samples_per_cls = [44, 551, 71, 200, 997, 137, 192, 661, 335, 136,
-                       1119, 767, 203, 331, 105, 325, 302, 137, 239,
-                       830, 439, 358, 176, 1364, 151, 397, 47, 101,
-                       531, 327, 181, 349, 281, 265, 64, 344]
-        self.cbfl = ClassBalancedFocalLoss(samples_per_cls, beta=0.9999, gamma=2.0)
         device = next(model.parameters()).device  # get model device
         h = model.args  # hyperparameters
 
         m = model.model[-1]  # Detect() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
+        from ultralytics.losses import ClassBalancedFocalLoss
+        samples_per_cls = [44, 551, 71, 200, 997, 137, 192, 661, 335, 136,
+                           1119, 767, 203, 331, 105, 325, 302, 137, 239,
+                           830, 439, 358, 176, 1364, 151, 397, 47, 101,
+                           531, 327, 181, 349, 281, 265, 64, 344]
+self.cbfl = ClassBalancedFocalLoss(samples_per_cls, beta=0.9999, gamma=2.0)
         self.hyp = h
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
