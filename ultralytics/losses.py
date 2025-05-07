@@ -35,7 +35,7 @@ class ClassBalancedFocalLoss(nn.Module):
         p     = torch.sigmoid(logits)
         pt    = p*targets + (1-p)*(1-targets)
         focal = (1-pt).pow(self.gamma)
-        cw    = self.cw.view(1, -1, 1)
+        cw = self.cw.view(1, 1, -1)
         return (cw * focal * bce).mean()
 
 class CBFLossWrapper(nn.Module):
