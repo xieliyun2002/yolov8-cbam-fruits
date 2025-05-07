@@ -10,10 +10,7 @@ from ultralytics.nn.modules.block import CBAM
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ultralytics.losses import ClassBalancedFocalLoss
 from ultralytics.utils.loss import E2EDetectLoss, v8DetectionLoss
-
-
 from ultralytics.nn.autobackend import check_class_names
 from ultralytics.nn.modules import (
     AIFI,
@@ -434,32 +431,8 @@ class DetectionModel(BaseModel):
         return y
         
     def init_criterion(self):
-        from ultralytics.losses import ClassBalancedFocalLoss, CBFLossWrapper
-        from ultralytics.utils.loss import v8DetectionLoss, E2EDetectLoss
-
-    # 1. 基础 YOLO 损失（一次性）
-        base_loss = (E2EDetectLoss(self) if getattr(self, "end2end", False)
-                 else v8DetectionLoss(self))
-
-    # 2. CBFL 超参（一次性）
-        samples_per_cls = [
-        44, 551, 71, 200, 997, 137, 192, 661, 335, 136,
-        1119, 767, 203, 331, 105, 325, 302, 137, 239,
-        830, 439, 358, 176, 1364, 151, 397, 47, 101,
-        531, 327, 181, 349, 281, 265, 64, 344
-        ]
-        cbfl = ClassBalancedFocalLoss(samples_per_cls, beta=0.9999, gamma=2.0)
-
-    # 3. 其它参数
-        cls_w   = getattr(self, "args", {}).get("cls",
-              getattr(self, "hyp",  {}).get("cls", 1.0))
-        nc      = self.model[-1].nc          # 类别数
-        reg_max = self.model[-1].reg_max     # DFL bins
-
-    # 4. 最终包装
-        self.criterion = CBFLossWrapper(base_loss, cbfl, cls_w)
-
-        return self.criterion   
+        from ultralytics.utils.loss import v8DetectionLoss
+        return v8DetectionLoss(self) 
 
 
 
