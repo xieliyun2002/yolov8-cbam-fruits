@@ -41,36 +41,34 @@ class ClassBalancedFocalLoss(nn.Module):
 
         return (cw * focal * bce).mean()
 
-class CBFLossWrapper(nn.Module):
-    def __init__(self, base_loss, cbfl, cls_w):
+class CBFLossWrapper(torch.nn.Module):
+    def __init__(self, base_loss, cbfl, cls_weight):
         super().__init__()
-        self.base_loss = base_loss
-        self.cbfl      = cbfl
-        self.cls_w     = cls_w
-
-        # <<<<<< 修 正 处 >>>>>>
-        self.nc       = cbfl.cw.numel()          # ← 代替 cbfl.num_classes
-        self.reg_max  = getattr(base_loss, 'reg_max', 16)
+        self.base_loss = base_loss          # 原 YOLO 损失（box+dfl+…）
+        self.cbfl      = cbfl               # ClassBalancedFocalLoss
+        self.cls_w     = cls_weight         # 分类损失权重
 
     def forward(self, preds, batch):
-        # 1. 基础 YOLOv8 损失
-        yolo_loss = self.base_loss(preds, batch)
+        # 1) 原始 YOLO 损失
+        det_loss = self.base_loss(preds, batch)
 
-        # 2. 提取分类 logits：preds[1] 是 Detect 的输出（List[Tensors]）
-        logits = extract_cls_preds(preds, self.nc, self.reg_max)  # => [B, N, C]
+        # 2) 取出分类 logits  [B, N, C]
+        feats        = preds[1] if isinstance(preds, tuple) else preds
+        b            = feats[0].shape[0]
+        nc           = self.cbfl.cw.numel()
+        reg_max      = self.base_loss.reg_max
+        _, cls_pred  = torch.cat([x.view(b, nc + reg_max*4, -1) for x in feats], 2)\
+                         .split((reg_max*4, nc), 1)
+        cls_pred     = cls_pred.permute(0, 2, 1).contiguous()   # [B,N,C]
 
-        # 3. 获取目标标签
-        gt_labels = batch['cls']  # shape: [B, N, 1]
-        target_scores = batch['batch_idx'].unsqueeze(-1).float() * 0 + 1.0  # 所有为1，等效于 valid mask
+        # 3) 生成 one‑hot GT（忽略无效 anchor）
+        cls_id   = batch['cls'].long().squeeze(-1)              # [B,N]
+        pos_mask = (cls_id != -1)                               # -1 表示背景
+        targets  = torch.zeros_like(cls_pred)
+        targets.scatter_(2, cls_id.unsqueeze(-1), 1.0)
+        targets  = targets * pos_mask.unsqueeze(-1)
 
-        # 4. 构建 one-hot 标签
-        cls_ids = gt_labels.squeeze(-1).long()               # [B, N]
-        one_hot = F.one_hot(cls_ids, num_classes=self.nc)    # [B, N, C]
-        one_hot = one_hot * target_scores.unsqueeze(-1)      # 掩码无效项
-        one_hot = one_hot.to(dtype=logits.dtype)             # 与 logits 对齐
+        # 4) CBFL 分类损失
+        loss_cls = self.cbfl(cls_pred, targets)
 
-        # 5. 计算分类损失
-        cbfl_loss = self.cbfl(logits, one_hot)               # logits: [B, N, C], one_hot: [B, N, C]
-
-        # 6. 加权合并
-        return yolo_loss + self.cls_w * cbfl_loss
+        return det_loss + self.cls_w * loss_cls
