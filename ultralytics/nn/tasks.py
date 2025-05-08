@@ -439,7 +439,7 @@ class DetectionModel(BaseModel):
                        830, 439, 358, 176, 1364, 151, 397, 47, 101,
                        531, 327, 181, 349, 281, 265, 64, 344]
         cbfl = ClassBalancedFocalLoss(samples_per_cls)
-        cls_w = getattr(self, "args", {}).get("cls", 1.0)
+        cls_w = self.__dict__.get("args", {}).get("cls", 1.0)
 
         return CBFLossWrapper(
             base_loss,
