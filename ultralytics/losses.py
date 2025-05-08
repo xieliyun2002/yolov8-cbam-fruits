@@ -41,17 +41,28 @@ class ClassBalancedFocalLoss(nn.Module):
 
 class CBFLossWrapper:
     def __init__(self, base_loss, cbfl, cls_w, nc, reg_max):
-        self.base_loss, self.cbfl, self.cls_w = base_loss, cbfl, cls_w
-        self.nc, self.reg_max = nc, reg_max
+        self.base_loss = base_loss      # v8DetectionLoss 实例
+        self.cbfl      = cbfl
+        self.cls_w     = cls_w
+        self.nc        = nc
+        self.reg_max   = reg_max
 
     def __call__(self, preds, batch):
-        # 原 YOLO loss
-        yolo_loss = self.base_loss(preds, batch)
+        # ---------------- YOLO 原生三分损失 ----------------
+        yolo_loss, aux = self.base_loss(preds, batch)   # yolo_loss: 标量, aux: (box, cls, dfl)
 
-        # 分类 logits 提取
-        logits = extract_cls_preds(preds, self.nc, self.reg_max)  # (B, N, C)
-        cls_ids = batch['cls'].long().squeeze(-1)                 # (B, N)
-        one_hot = F.one_hot(cls_ids, self.nc).float().to(logits.device)
+        # ---------------- 取出分类 logits ------------------
+        from ultralytics.losses import extract_cls_preds
+        logits = extract_cls_preds(preds, self.nc, self.reg_max)   # [B, N, C]
 
-        cbfl_loss = self.cbfl(logits, one_hot)
+        # ---------------- 生成 anchor‑级 targets -----------
+        # base_loss 在 forward 内部已经做过 TaskAlignedAssigner，
+        # 把结果保存为 self.base_loss._cached_target_scores，直接复用
+        target_scores = self.base_loss._cached_target_scores.to(logits.device)  # [B, N, C]
+
+        # target_scores 对正样本 anchor 的 (cls_id) 位置 = IoU 权重，
+        # 其余 = 0，天然就是 one‑hot ∧ 权重矩阵；直接拿来用
+        cbfl_loss = self.cbfl(logits, target_scores)
+
+        # ---------------- 合并 ----------------------------
         return yolo_loss + self.cls_w * cbfl_loss
