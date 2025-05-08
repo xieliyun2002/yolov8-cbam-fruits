@@ -217,7 +217,7 @@ class v8DetectionLoss:
         return dist2bbox(pred_dist, anchor_points, xywh=False)
 
     def __call__(self, preds, batch):
-        """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
+     """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
         feats = preds[1] if isinstance(preds, tuple) else preds
         pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
@@ -252,31 +252,12 @@ class v8DetectionLoss:
             gt_bboxes,
             mask_gt,
         )
-        
 
-        # target_scores: [B, N], 值为类别索引或浮点 label，需要转换为 one-hot
-        B, N, C = pred_scores.shape
-        target_scores_ = torch.zeros_like(pred_scores)  # [B, N, C]
+        target_scores_sum = max(target_scores.sum(), 1)
 
-        # 原始标签（整型）来自 assigner 返回的 gt_labels（已广播到 [B, N, 1]）
-        # 这里默认 -1 表示负样本，跳过
-        for b in range(B):
-            for n in range(N):
-                cls_id_tensor = target_scores[b, n]
-                if cls_id_tensor.numel() == 1:
-                    cls_id = int(cls_id_tensor.item())
-                else:
-                    cls_id = int(cls_id_tensor.argmax().item())  # ✅ 获取最大值对应的类别索引
-                if 0 <= cls_id < C:
-                    target_scores_[b, n, cls_id] = 1.0
-
-
-        target_scores = target_scores_.to(dtype).to(pred_scores.device)
-        target_scores_sum = max(target_scores.sum(), 1.0)
-
-        # Cls loss with CBFL
-        loss[1] = self.cbfl(pred_scores, target_scores) / target_scores_sum
-
+        # Cls loss
+        # loss[1] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
+        loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
 
         # Bbox loss
         if fg_mask.sum():
@@ -288,10 +269,6 @@ class v8DetectionLoss:
         loss[0] *= self.hyp.box  # box gain
         loss[1] *= self.hyp.cls  # cls gain
         loss[2] *= self.hyp.dfl  # dfl gain
-        print("pred_scores stats:", pred_scores.min().item(), pred_scores.max().item())
-        print("targets unique:", targets.unique())
-
-
 
         return loss * batch_size, loss.detach()  # loss(box, cls, dfl)
 
