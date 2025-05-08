@@ -262,9 +262,14 @@ class v8DetectionLoss:
         # 这里默认 -1 表示负样本，跳过
         for b in range(B):
             for n in range(N):
-                cls_id = int(target_scores[b, n].item())  # 强制提取单个整数
-                if 0 <= cls_id < C:
-                    target_scores_[b, n, cls_id] = 1.0
+            cls_id_tensor = target_scores[b, n]
+            if cls_id_tensor.numel() == 1:
+                cls_id = int(cls_id_tensor.item())
+            else:
+                cls_id = int(cls_id_tensor.argmax().item())  # ✅ 获取最大值对应的类别索引
+            if 0 <= cls_id < C:
+                target_scores_[b, n, cls_id] = 1.0
+
 
         target_scores = target_scores_.to(dtype).to(pred_scores.device)
         target_scores_sum = max(target_scores.sum(), 1.0)
