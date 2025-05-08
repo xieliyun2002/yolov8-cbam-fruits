@@ -431,7 +431,7 @@ class DetectionModel(BaseModel):
         return y
         
     def init_criterion(self):
-        from my_losses import ClassBalancedFocalLoss, CBFLossWrapper   # ← 根据实际路径修改
+        from ultralytics.losses import ClassBalancedFocalLoss, CBFLossWrapper
 
         base_loss = v8DetectionLoss(self)
         samples_per_cls = [44, 551, 71, 200, 997, 137, 192, 661, 335, 136,
