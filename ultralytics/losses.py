@@ -23,52 +23,35 @@ class ClassBalancedFocalLoss(nn.Module):
     def __init__(self, samples_per_cls, beta=0.9999, gamma=2.0):
         super().__init__()
         spc = torch.tensor(samples_per_cls, dtype=torch.float)
-        eff = 1 - beta**spc
+        eff = 1 - beta ** spc
         w   = (1 - beta) / eff
         w   = w / w.mean()
         self.register_buffer('cw', w)
         self.gamma = gamma
-        self.bce   = nn.BCEWithLogitsLoss(reduction='none')
+        self.bce = nn.BCEWithLogitsLoss(reduction='none')
 
     def forward(self, logits, targets):
-        bce = self.bce(logits, targets)
-        p = torch.sigmoid(logits)
-        pt = p * targets + (1 - p) * (1 - targets)
+        bce   = self.bce(logits, targets)
+        p     = torch.sigmoid(logits)
+        pt    = p * targets + (1 - p) * (1 - targets)
         focal = (1 - pt).pow(self.gamma)
-
-        # ✅ 修复：将 cw 移到 logits 同一设备上
-        cw = self.cw.view(1, 1, -1).to(logits.device)
-
+        cw    = self.cw.view(1, 1, -1)          # 修正
         return (cw * focal * bce).mean()
 
-class CBFLossWrapper(torch.nn.Module):
-    def __init__(self, base_loss, cbfl, cls_weight):
-        super().__init__()
-        self.base_loss = base_loss          # 原 YOLO 损失（box+dfl+…）
-        self.cbfl      = cbfl               # ClassBalancedFocalLoss
-        self.cls_w     = cls_weight         # 分类损失权重
 
-    def forward(self, preds, batch):
-        # 1) 原始 YOLO 损失
-        det_loss = self.base_loss(preds, batch)
+class CBFLossWrapper:
+    def __init__(self, base_loss, cbfl, cls_w, nc, reg_max):
+        self.base_loss, self.cbfl, self.cls_w = base_loss, cbfl, cls_w
+        self.nc, self.reg_max = nc, reg_max
 
-        # 2) 取出分类 logits  [B, N, C]
-        feats        = preds[1] if isinstance(preds, tuple) else preds
-        b            = feats[0].shape[0]
-        nc           = self.cbfl.cw.numel()
-        reg_max      = self.base_loss.reg_max
-        _, cls_pred  = torch.cat([x.view(b, nc + reg_max*4, -1) for x in feats], 2)\
-                         .split((reg_max*4, nc), 1)
-        cls_pred     = cls_pred.permute(0, 2, 1).contiguous()   # [B,N,C]
+    def __call__(self, preds, batch):
+        # 原 YOLO loss
+        yolo_loss = self.base_loss(preds, batch)
 
-        # 3) 生成 one‑hot GT（忽略无效 anchor）
-        cls_id   = batch['cls'].long().squeeze(-1)              # [B,N]
-        pos_mask = (cls_id != -1)                               # -1 表示背景
-        targets  = torch.zeros_like(cls_pred)
-        targets.scatter_(2, cls_id.unsqueeze(-1), 1.0)
-        targets  = targets * pos_mask.unsqueeze(-1)
+        # 分类 logits 提取
+        logits = extract_cls_preds(preds, self.nc, self.reg_max)  # (B, N, C)
+        cls_ids = batch['cls'].long().squeeze(-1)                 # (B, N)
+        one_hot = F.one_hot(cls_ids, self.nc).float().to(logits.device)
 
-        # 4) CBFL 分类损失
-        loss_cls = self.cbfl(cls_pred, targets)
-
-        return det_loss + self.cls_w * loss_cls
+        cbfl_loss = self.cbfl(logits, one_hot)
+        return yolo_loss + self.cls_w * cbfl_loss
