@@ -268,7 +268,9 @@ class v8DetectionLoss:
         loss[0] *= self.hyp.box  # box gain
         loss[1] *= self.hyp.cls  # cls gain
         loss[2] *= self.hyp.dfl  # dfl gain
-        print("target_scores.sum():", target_scores.sum().item())
+        print("logits stats:", logits.min().item(), logits.max().item())
+        print("targets unique:", targets.unique())
+
 
 
         return loss * batch_size, loss.detach()  # loss(box, cls, dfl)
