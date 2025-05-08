@@ -262,7 +262,7 @@ class v8DetectionLoss:
         # 这里默认 -1 表示负样本，跳过
         for b in range(B):
             for n in range(N):
-                cls_id = target_scores[b, n].long()
+                cls_id = int(target_scores[b, n].item())  # 强制提取单个整数
                 if 0 <= cls_id < C:
                     target_scores_[b, n, cls_id] = 1.0
 
