@@ -252,11 +252,26 @@ class v8DetectionLoss:
             gt_bboxes,
             mask_gt,
         )
+        
 
-        target_scores_sum = max(target_scores.sum(), 1)
+        # target_scores: [B, N], 值为类别索引或浮点 label，需要转换为 one-hot
+        B, N, C = pred_scores.shape
+        target_scores_ = torch.zeros_like(pred_scores)  # [B, N, C]
 
-        # Cls loss
-        loss[1] = self.cbfl(pred_scores, target_scores.to(dtype)) / target_scores_sum
+        # 原始标签（整型）来自 assigner 返回的 gt_labels（已广播到 [B, N, 1]）
+        # 这里默认 -1 表示负样本，跳过
+        for b in range(B):
+            for n in range(N):
+                cls_id = target_scores[b, n].long()
+                if 0 <= cls_id < C:
+                    target_scores_[b, n, cls_id] = 1.0
+
+        target_scores = target_scores_.to(dtype).to(pred_scores.device)
+        target_scores_sum = max(target_scores.sum(), 1.0)
+
+        # Cls loss with CBFL
+        loss[1] = self.cbfl(pred_scores, target_scores) / target_scores_sum
+
 
         # Bbox loss
         if fg_mask.sum():
