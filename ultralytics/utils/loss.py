@@ -15,7 +15,7 @@ from .tal import bbox2dist
 
 class VarifocalLoss(nn.Module):
     """
-    Varifocal loss by Zhang et al.
+    Varifocal loss by Zhang et al.v8DetectionLoss
 
     https://arxiv.org/abs/2008.13367.
 
@@ -268,6 +268,8 @@ class v8DetectionLoss:
         loss[0] *= self.hyp.box  # box gain
         loss[1] *= self.hyp.cls  # cls gain
         loss[2] *= self.hyp.dfl  # dfl gain
+        print("target_scores.sum():", target_scores.sum().item())
+
 
         return loss * batch_size, loss.detach()  # loss(box, cls, dfl)
 
