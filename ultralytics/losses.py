@@ -50,19 +50,17 @@ class CBFLossWrapper(nn.Module):
 
     def __call__(self, preds, batch):
         # ---------- 原 YOLO 损失 ----------
-        yolo_total, yolo_items = self.base_loss(preds, batch)   # ← 注意解包
+        yolo_total, yolo_items = self.base_loss(preds, batch)  
 
         # ---------- CBFL 损失 ----------
         logits = extract_cls_preds(preds, self.nc, self.reg_max)  # [B, N, C]
-        target_scores = yolo_items.new_zeros(logits.shape)        # 创建 0 张量
+        target_scores = yolo_items.new_zeros(logits.shape)      
         # 直接用 assigner 得到的 target_scores（IoU 权重）更加正规，
-        # 这里示例填 0，你可以按需要传进来再用；
         cbfl_loss = self.cbfl(logits, target_scores)
 
         # ---------- 合并 ----------
         total_loss = yolo_total + self.cls_w * cbfl_loss
 
-        # 把 cls 分量（yolo_items[1]）加上 CBFL，可选
         yolo_items[1] = yolo_items[1] + self.cls_w * cbfl_loss.detach()
 
         return total_loss, yolo_items        # ★ 返回两个值
